@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Day Timer</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0a0a0a;--surface:#111;--surface2:#141414;
+      --border:#1e1e1e;--border2:#252525;
+      --accent:#c8f07a;--accent-dim:rgba(200,240,122,0.07);--accent-glow:rgba(200,240,122,0.25);
+      --red:#f07a7a;--red-dim:rgba(240,122,122,0.08);
+      --text-primary:#f0f0f0;--text-muted:#444;--text-dim:#2a2a2a;
+      --tab-h:52px;
+    }
+    html,body{height:100%;background:var(--bg);font-family:'DM Mono',monospace;overflow:hidden;}
+    body::before{
+      content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.5;
+      background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    }
+
+    /* ── LAYOUT ── */
+    #app{display:flex;flex-direction:column;height:100vh;}
+
+    /* ── TABBAR ── */
+    #tabbar{
+      position:relative;z-index:10;
+      display:flex;align-items:stretch;
+      height:var(--tab-h);
+      background:var(--surface);
+      border-bottom:1px solid var(--border);
+      flex-shrink:0;
+      padding:0 24px;
+      gap:2px;
+    }
+    .tab{
+      display:flex;align-items:center;gap:8px;
+      padding:0 20px;
+      font-size:10px;letter-spacing:0.18em;text-transform:uppercase;
+      color:var(--text-muted);cursor:pointer;
+      border-bottom:2px solid transparent;
+      transition:color 0.2s,border-color 0.2s;
+      user-select:none;
+      margin-bottom:-1px;
+    }
+    .tab:hover{color:var(--text-primary);}
+    .tab.active{color:var(--text-primary);border-bottom-color:var(--accent);}
+    .tab-icon{font-size:13px;opacity:0.6;}
+    .tab.active .tab-icon{opacity:1;}
+    .tab-divider{width:1px;background:var(--border);margin:14px 6px;flex-shrink:0;}
+
+    /* ── PANEL AREA ── */
+    #panels{flex:1;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;padding:48px 20px 60px;}
+    .panel{display:none;width:100%;max-width:400px;animation:fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) both;}
+    .panel.active{display:block;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+    /* ── CARD ── */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:40px 38px 36px;}
+    .card-label{font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-muted);margin-bottom:30px;}
+    .divider{width:100%;height:1px;background:var(--border);margin:26px 0;}
+
+    /* ── TIMER ── */
+    .big-num{font-family:'Syne',sans-serif;font-size:88px;font-weight:800;line-height:1;color:var(--text-primary);letter-spacing:-3px;display:block;}
+    .unit{font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-muted);margin-top:8px;display:block;}
+    .prog-meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+    .prog-lbl{font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-muted);}
+    .prog-pct{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--accent);letter-spacing:-0.5px;}
+    .track{width:100%;height:3px;background:#1a1a1a;border-radius:2px;overflow:hidden;}
+    .fill{height:100%;border-radius:2px;transition:width 1s linear;}
+    .fill-green{background:var(--accent);box-shadow:0 0 10px var(--accent-glow);}
+    .fill-red{background:var(--red);box-shadow:0 0 10px rgba(240,122,122,0.3);}
+    .footer-row{margin-top:22px;display:flex;justify-content:space-between;align-items:center;}
+    .footer-txt{font-size:10px;letter-spacing:0.13em;text-transform:uppercase;color:#272727;}
+    .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2.5s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(0.6)}}
+
+    /* ── SUBTRACT ── */
+    .sub-num{font-family:'Syne',sans-serif;font-size:60px;font-weight:800;color:var(--text-primary);letter-spacing:-2px;display:block;transition:color 0.3s;}
+    .sub-num.changed{color:var(--accent);}
+    .sub-sublabel{font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-muted);margin-top:6px;margin-bottom:18px;display:block;}
+    .log{display:flex;flex-direction:column;gap:5px;max-height:160px;overflow-y:auto;margin-bottom:14px;scrollbar-width:thin;scrollbar-color:#1e1e1e transparent;}
+    .log:empty::before{content:'No subtractions yet.';font-size:10px;color:var(--text-dim);letter-spacing:0.1em;}
+    .log-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:7px 10px;background:var(--surface2);border-radius:2px;border-left:2px solid var(--border2);animation:slideIn 0.2s ease both;}
+    .log-row .lr-lbl{color:#3a3a3a;}
+    .log-row .lr-val{color:var(--red);font-weight:500;}
+    @keyframes slideIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+    .input-row{display:flex;gap:8px;}
+    .row-btns{display:flex;gap:8px;margin-top:9px;}
+
+    /* ── INPUTS / BUTTONS ── */
+    input[type="number"],input[type="text"]{
+      background:var(--surface2);border:1px solid var(--border2);border-radius:3px;
+      color:var(--text-primary);font-family:'DM Mono',monospace;font-size:12px;
+      padding:9px 11px;outline:none;transition:border-color 0.2s;
+    }
+    input[type="number"]{-moz-appearance:textfield;}
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+    input[type="number"]:focus,input[type="text"]:focus{border-color:#333;}
+    input::placeholder{color:var(--text-dim);}
+    .input-row input{flex:1;}
+    .btn{
+      background:transparent;border:1px solid var(--border2);border-radius:3px;
+      color:var(--text-muted);font-family:'DM Mono',monospace;font-size:10px;
+      letter-spacing:0.12em;text-transform:uppercase;padding:9px 13px;
+      cursor:pointer;transition:all 0.2s;white-space:nowrap;
+    }
+    .btn:hover{border-color:#333;color:var(--text-primary);}
+    .btn-accent{background:var(--accent-dim);border-color:rgba(200,240,122,0.15);color:var(--accent);}
+    .btn-accent:hover{background:rgba(200,240,122,0.13);border-color:rgba(200,240,122,0.28);}
+    .btn-danger{background:var(--red-dim);border-color:rgba(240,122,122,0.15);color:var(--red);}
+    .btn-danger:hover{background:rgba(240,122,122,0.13);border-color:rgba(240,122,122,0.28);}
+
+    /* ── PLANNER ── */
+    .planner-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;}
+    .pb-num{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;color:var(--text-primary);letter-spacing:-1px;line-height:1;}
+    .pb-num.over{color:var(--red);}
+    .pb-lbl{font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-muted);margin-top:3px;}
+    .task-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#1e1e1e transparent;margin-bottom:14px;}
+    .task-list:empty::before{content:'No tasks yet. Add one below.';font-size:10px;color:var(--text-dim);letter-spacing:0.1em;display:block;padding:10px 0;}
+    .task-item{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;animation:slideIn 0.2s ease both;}
+    .task-item.editing{border-color:rgba(200,240,122,0.18);background:rgba(200,240,122,0.02);}
+    .task-name{flex:1;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .task-mins-lbl{font-size:11px;color:var(--accent);white-space:nowrap;min-width:52px;text-align:right;}
+    .ti-btn{background:none;border:none;cursor:pointer;padding:2px 5px;font-size:11px;border-radius:2px;transition:background 0.15s;}
+    .ti-edit{color:#3a3a3a;}.ti-edit:hover{color:var(--accent);background:var(--accent-dim);}
+    .ti-del{color:#2a2a2a;}.ti-del:hover{color:var(--red);background:var(--red-dim);}
+    .inline-edit{display:flex;gap:6px;align-items:center;flex:1;}
+    .inline-edit input{background:transparent;border:none;border-bottom:1px solid var(--border2);color:var(--text-primary);font-family:'DM Mono',monospace;font-size:11px;outline:none;padding:2px 4px;}
+    .inline-edit input[type="number"]{-moz-appearance:textfield;}
+    .inline-edit input[type="number"]::-webkit-outer-spin-button,
+    .inline-edit input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+    .inline-edit .ie-name{flex:1;}.inline-edit .ie-mins{width:50px;text-align:right;}
+    .add-form{display:flex;gap:8px;align-items:center;}
+    .add-form .af-name{flex:1;}.add-form .af-mins{width:72px;}
+    .planner-bar-wrap{margin-top:14px;}
+    .planner-bar-meta{display:flex;justify-content:space-between;margin-bottom:7px;}
+    .planner-bar-meta span{font-size:10px;letter-spacing:0.13em;text-transform:uppercase;color:var(--text-muted);}
+    .planner-bar-meta .over{color:var(--red);}
+    .plan-footer{margin-top:14px;display:flex;justify-content:flex-end;}
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TABBAR -->
+  <div id="tabbar">
+    <div class="tab active" onclick="switchTab('timer')" id="tab-timer">
+      <span class="tab-icon">⏱</span> Day Timer
+    </div>
+    <div class="tab-divider"></div>
+    <div class="tab" onclick="switchTab('subtract')" id="tab-subtract">
+      <span class="tab-icon">−</span> Subtract
+    </div>
+    <div class="tab-divider"></div>
+    <div class="tab" onclick="switchTab('planner')" id="tab-planner">
+      <span class="tab-icon">📋</span> Day Planner
+    </div>
+  </div>
+
+  <!-- PANELS -->
+  <div id="panels">
+
+    <!-- PANEL 1: TIMER -->
+    <div class="panel active" id="panel-timer">
+      <div class="card">
+        <div class="card-label">Minutes left in your day</div>
+        <span class="big-num" id="mins">—</span>
+        <span class="unit">minutes remaining until midnight</span>
+        <div class="divider"></div>
+        <div class="prog-meta">
+          <span class="prog-lbl">Day used</span>
+          <span class="prog-pct" id="pct">—%</span>
+        </div>
+        <div class="track"><div class="fill fill-green" id="bar" style="width:0%"></div></div>
+        <div class="footer-row">
+          <span class="footer-txt">Updates every minute · resets at midnight</span>
+          <span class="dot"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL 2: SUBTRACT -->
+    <div class="panel" id="panel-subtract">
+      <div class="card">
+        <div class="card-label">Subtract from your day</div>
+        <span class="sub-num" id="subNum">—</span>
+        <span class="sub-sublabel" id="subMeta">minutes remaining after subtractions</span>
+        <div class="log" id="subLog"></div>
+        <div class="input-row">
+          <input type="number" id="subInp" placeholder="Minutes to subtract…" min="1" inputmode="numeric"/>
+          <button class="btn btn-accent" onclick="doSubtract()">− Subtract</button>
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-danger" onclick="resetSub()">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL 3: PLANNER -->
+    <div class="panel" id="panel-planner">
+      <div class="card">
+        <div class="planner-top">
+          <div class="card-label" style="margin-bottom:0">Day Planner</div>
+          <div>
+            <div class="pb-num" id="planLeft">1440</div>
+            <div class="pb-lbl">mins unplanned</div>
+          </div>
+        </div>
+        <div class="task-list" id="taskList"></div>
+        <div class="add-form">
+          <input class="af-name" type="text" id="tName" placeholder="Task name…"/>
+          <input class="af-mins" type="number" id="tMins" placeholder="mins" min="1" inputmode="numeric"/>
+          <button class="btn btn-accent" onclick="addTask()">Add</button>
+        </div>
+        <div class="planner-bar-wrap">
+          <div class="planner-bar-meta">
+            <span>Planned</span>
+            <span id="planBarLbl">0 / 1440 min</span>
+          </div>
+          <div class="track"><div class="fill fill-green" id="planFill" style="width:0%"></div></div>
+        </div>
+        <div class="plan-footer">
+          <button class="btn btn-danger" onclick="clearPlanner()">Clear all</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panels -->
+</div><!-- /app -->
+
+<script>
+/* ── TABS ── */
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>{ p.classList.remove('active'); });
+  document.getElementById('tab-'+id).classList.add('active');
+  const panel=document.getElementById('panel-'+id);
+  panel.classList.add('active');
+  // re-trigger animation
+  panel.style.animation='none';
+  panel.offsetHeight;
+  panel.style.animation='';
+}
+
+/* ── CARD 1: TIMER ── */
+function updateTimer(){
+  const now=new Date(),total=1440;
+  const elapsed=now.getHours()*60+now.getMinutes();
+  const rem=total-elapsed;
+  const pct=((elapsed/total)*100).toFixed(1);
+  document.getElementById('mins').textContent=rem.toLocaleString();
+  document.getElementById('pct').textContent=pct+'%';
+  document.getElementById('bar').style.width=pct+'%';
+}
+updateTimer();setInterval(updateTimer,60000);
+
+/* ── CARD 2: SUBTRACT ── */
+let subBase=null,subCur=null,subHist=[];
+function getLive(){const n=new Date();return 1440-(n.getHours()*60+n.getMinutes());}
+function renderSub(){
+  const el=document.getElementById('subNum');
+  const v=subCur!==null?subCur:getLive();
+  el.textContent=v.toLocaleString();
+  el.className='sub-num'+(subHist.length>0?' changed':'');
+  const meta=document.getElementById('subMeta');
+  meta.textContent=subHist.length===0
+    ?'minutes remaining after subtractions'
+    :`subtracted ${subBase-subCur} min total from ${subBase} min`;
+}
+function renderLog(){
+  const log=document.getElementById('subLog');log.innerHTML='';
+  subHist.forEach((e,i)=>{
+    const d=document.createElement('div');d.className='log-row';
+    d.innerHTML=`<span class="lr-lbl">#${i+1} &mdash; step ${i+1}</span><span class="lr-val">&minus; ${e} min</span>`;
+    log.appendChild(d);
+  });
+  log.scrollTop=log.scrollHeight;
+}
+function doSubtract(){
+  const inp=document.getElementById('subInp');
+  const v=parseInt(inp.value);if(!v||v<=0)return;
+  if(subBase===null){subBase=getLive();subCur=subBase;}
+  subCur-=v;subHist.push(v);
+  renderSub();renderLog();inp.value='';inp.focus();
+}
+function resetSub(){subBase=null;subCur=null;subHist=[];renderSub();renderLog();}
+document.getElementById('subInp').addEventListener('keydown',e=>{if(e.key==='Enter')doSubtract();});
+document.getElementById('subInp').addEventListener('wheel',e=>{e.preventDefault();},{passive:false});
+renderSub();
+
+/* ── CARD 3: PLANNER ── */
+const TOTAL=1440;let tasks=[],editId=null;
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function usedMins(){return tasks.reduce((s,t)=>s+t.mins,0);}
+function updatePlanStats(){
+  const u=usedMins(),left=TOTAL-u,pct=Math.min((u/TOTAL)*100,100);
+  const leftEl=document.getElementById('planLeft');
+  leftEl.textContent=left.toLocaleString();leftEl.className='pb-num'+(left<0?' over':'');
+  document.getElementById('planBarLbl').textContent=`${u} / ${TOTAL} min`;
+  const fill=document.getElementById('planFill');
+  fill.style.width=pct+'%';
+  fill.className='fill '+(left<0?'fill-red':'fill-green');
+}
+function renderTasks(){
+  const list=document.getElementById('taskList');list.innerHTML='';
+  tasks.forEach(t=>{
+    const div=document.createElement('div');
+    div.className='task-item'+(editId===t.id?' editing':'');
+    if(editId===t.id){
+      div.innerHTML=`<div class="inline-edit">
+        <input class="ie-name" type="text" value="${esc(t.name)}" id="en-${t.id}"/>
+        <input class="ie-mins" type="number" value="${t.mins}" id="em-${t.id}" min="1" inputmode="numeric"/>
+      </div>
+      <button class="ti-btn ti-edit" onclick="saveEdit('${t.id}')">&#10003;</button>
+      <button class="ti-btn ti-del" onclick="cancelEdit()">&#10005;</button>`;
+      setTimeout(()=>{const n=document.getElementById('en-'+t.id);if(n)n.focus();},0);
+      // block scroll on inline mins input after render
+      setTimeout(()=>{
+        const mi=document.getElementById('em-'+t.id);
+        if(mi) mi.addEventListener('wheel',e=>e.preventDefault(),{passive:false});
+      },10);
+    } else {
+      div.innerHTML=`<span class="task-name">${esc(t.name)}</span>
+      <span class="task-mins-lbl">${t.mins} min</span>
+      <button class="ti-btn ti-edit" onclick="startEdit('${t.id}')" title="Edit">&#9998;</button>
+      <button class="ti-btn ti-del" onclick="delTask('${t.id}')" title="Delete">&#10005;</button>`;
+    }
+    list.appendChild(div);
+  });
+  updatePlanStats();
+}
+function addTask(){
+  const n=document.getElementById('tName').value.trim();
+  const m=parseInt(document.getElementById('tMins').value);
+  if(!n||!m||m<=0)return;
+  tasks.push({id:uid(),name:n,mins:m});
+  document.getElementById('tName').value='';document.getElementById('tMins').value='';
+  document.getElementById('tName').focus();renderTasks();
+}
+function delTask(id){tasks=tasks.filter(t=>t.id!==id);if(editId===id)editId=null;renderTasks();}
+function startEdit(id){editId=id;renderTasks();}
+function cancelEdit(){editId=null;renderTasks();}
+function saveEdit(id){
+  const n=document.getElementById('en-'+id);const m=document.getElementById('em-'+id);
+  if(!n||!m)return;
+  const name=n.value.trim();const mins=parseInt(m.value);
+  if(!name||!mins||mins<=0)return;
+  const t=tasks.find(x=>x.id===id);if(t){t.name=name;t.mins=mins;}
+  editId=null;renderTasks();
+}
+function clearPlanner(){tasks=[];editId=null;renderTasks();}
+document.getElementById('tName').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('tMins').focus();});
+document.getElementById('tMins').addEventListener('keydown',e=>{if(e.key==='Enter')addTask();});
+document.getElementById('tMins').addEventListener('wheel',e=>{e.preventDefault();},{passive:false});
+renderTasks();
+</script>
+</body>
+</html>
